@@ -69,11 +69,12 @@ public:
 
     qreal sqDistanceTo(QPointF a, QPointF b);
 
-    void shoutTo (Agent* other);
-
     void setPos(QPointF p) {position = p;}
 
     qreal radius() const {return r;}
+
+    void acousticShout(AcousticSpace &space);
+    void acousticListen(AcousticSpace &space);
 public slots:
     void move();
 

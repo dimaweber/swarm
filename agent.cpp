@@ -56,32 +56,43 @@ qreal Agent::sqDistanceTo(QPointF a, QPointF b)
     return pow(a.x()-b.x(), 2) + pow(a.y()-b.y(), 2);
 }
 
-void Agent::shoutTo(Agent *other)
+void Agent::acousticShout(AcousticSpace& space)
 {
-    qreal sqD = sqDistanceTo(pos(), other->pos());
-    if (sqD < pow(shoutRange, 2))
+    AcousticMessage msg;
+    msg.disatnceToWarehouse = distanceToWarehouse + shoutRange;
+    msg.distanceToResource = distanceToResource+shoutRange;
+    msg.sender = this;
+    space.shout(msg, pos().toPoint(), shoutRange);
+}
+
+void Agent::acousticListen(AcousticSpace &space)
+{
+    QVector<AcousticMessage>& vector = space.cell(pos());
+    foreach(const AcousticMessage& v, vector)
     {
-        if (other->distanceToResource > distanceToResource + shoutRange )
+        if (v.disatnceToWarehouse < distanceToWarehouse)
         {
-            other->distanceToResource = distanceToResource+shoutRange;
-            if (other->state() == Empty)
+            distanceToWarehouse = v.disatnceToWarehouse;
+            if (state() == Agent::Full)
             {
-                other->speed.angle = atan2(position.y() - other->position.y(),
-                                           position.x() - other->position.x());
-                emit newCommunication(other, this);
+                speed.angle = atan2(v.sender->pos().y() - pos().y(),
+                                    v.sender->pos().x() - pos().x());
+                emit newCommunication(this, v.sender);
             }
         }
-        if (other->distanceToWarehouse > distanceToWarehouse + shoutRange )
+
+        if (v.distanceToResource < distanceToResource)
         {
-            other->distanceToWarehouse = distanceToWarehouse+shoutRange;
-            if (other->state() == Full)
+            distanceToResource = v.distanceToResource;
+            if (state() == Agent::Empty)
             {
-                other->speed.angle = atan2(position.y() - other->position.y(),
-                                           position.x() - other->position.x());
-                emit newCommunication(other, this);
+                speed.angle = atan2(v.sender->pos().y() - pos().y(),
+                                    v.sender->pos().x() - pos().x());
+                emit newCommunication(this, v.sender);
             }
         }
     }
+
 }
 
 void Agent::setInitialSpeed()

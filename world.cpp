@@ -4,6 +4,11 @@
 #include <QElapsedTimer>
 #include <QRandomGenerator>
 
+bool operator < (const QPoint& a, const QPoint& b)
+{
+    return a.x() < b.x() || a.x() == b.x() && a.y() < b.y();
+}
+
 Agent* World::generateNewAgent()
 {
     QMutexLocker lock(&agentListAccess);
@@ -35,7 +40,7 @@ void World::onStart()
 PointOfInterest* World::generateResource()
 {
     PointOfInterest* poi = new PointOfInterest;
-    poi->radius = 25;
+    poi->radius = RESOURCE_INITIAL_RADIUS;
     poi->pos = randomWorldCoord(poi->radius);
     poi->volume = PI * poi->radius * poi->radius;
     poi->criticalVolume = poi->volume;
@@ -46,7 +51,7 @@ PointOfInterest* World::generateResource()
 PointOfInterest* World::generateWarehouse()
 {
     PointOfInterest* poi = new PointOfInterest;
-    poi->radius = 25;
+    poi->radius = WAREHOUSE_INITIAL_RADIUS;
     poi->volume = 0;
     poi->pos = randomWorldCoord(poi->radius);
     poi->criticalVolume = PI * pow(poi->radius, 2);
@@ -57,6 +62,7 @@ PointOfInterest* World::generateWarehouse()
 World::World(QObject *parent)
     :QObject(parent), size(WORLD_SIZE)
 {
+    acousticSpace = new AcousticSpace(boundRect().toRect());
 }
 
 void World::stop()
@@ -181,18 +187,18 @@ void World::iteration()
 
     agentListAccess.lock();
     foreach (Agent* agent, agents)
-    {
         agent->move();
 
-        foreach(Agent* other, agents)
-        {
-            if (agent == other)
-                continue;
-            agent->shoutTo(other);
-        }
-
-    }
     agentListAccess.unlock();
+
+    acousticSpace->clear();
+
+    foreach(Agent* agent, agents)
+        agent->acousticShout(*acousticSpace);
+
+    foreach(Agent* agent, agents)
+        agent->acousticListen(*acousticSpace);
+
     emit iterationEnd(calcTime.elapsed());
     //usleep(GRANULARITY_US);
 }

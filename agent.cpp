@@ -2,7 +2,7 @@
 #include <QRandomGenerator>
 
 Agent::Agent(World *world, QPointF initialPosition, QObject *parent)
-    :QObject(parent), brushEmpty(QColor("red")), brushFull(QColor("green")), agentState(Empty), pWorld(world)
+    :QObject(parent), brushEmpty(QColor("red")), brushFull(QColor("green")), penEmpty("red"), penFull("green"), pWorld(world)
 {
     setInitialSpeed();
     if (initialPosition == QPointF())
@@ -10,8 +10,6 @@ Agent::Agent(World *world, QPointF initialPosition, QObject *parent)
     else
         position = initialPosition;
 
-    //distanceToResource = qrand() % world->worldSize().width();
-    //distanceToWarehouse = qrand() % world->worldSize().width();
     capacity = PI * r * r;
 }
 
@@ -22,12 +20,12 @@ QRectF Agent::boundRect() const
 
 QBrush Agent::brush() const
 {
-    return (agentState == Empty)?brushEmpty : brushFull;
+    return (state() == Empty)?brushEmpty : brushFull;
 }
 
 QPen Agent::pen() const
 {
-    return (agentState == Empty)?penEmpty : penFull;
+    return (state() == Empty)?penEmpty : penFull;
 }
 
 QPointF Agent::pos() const
@@ -48,7 +46,7 @@ void Agent::buildAvatar(QGraphicsScene *scene)
 
 Agent::State Agent::state() const
 {
-    return agentState;
+    return qFuzzyIsNull(carriedResourceVolume)?Empty:Full;
 }
 
 qreal Agent::sqDistanceTo(QPointF a, QPointF b)
@@ -59,40 +57,40 @@ qreal Agent::sqDistanceTo(QPointF a, QPointF b)
 void Agent::acousticShout(AcousticSpace& space)
 {
     AcousticMessage msg;
-    msg.disatnceToWarehouse = distanceToWarehouse + shoutRange;
-    msg.distanceToResource = distanceToResource+shoutRange;
-    msg.sender = this;
+    msg.minDistanceToResourceSender = this;
+    msg.minDistanceToWarehouse = distanceToWarehouse + shoutRange;
+    msg.minDistanceToResource = distanceToResource+shoutRange;
+    msg.minDistanceToWarehouseSender = this;
+
     space.shout(msg, pos().toPoint(), shoutRange);
 }
 
 void Agent::acousticListen(AcousticSpace &space)
 {
-    QVector<AcousticMessage>& vector = space.cell(pos());
-    foreach(const AcousticMessage& v, vector)
+    AcousticMessage& v = space.cell(pos());
+    v.minDistanceToWarehouseAccess.lockForRead();
+    if (v.minDistanceToWarehouse < distanceToWarehouse && v.minDistanceToWarehouseSender)
     {
-        if (v.disatnceToWarehouse < distanceToWarehouse)
+        distanceToWarehouse = v.minDistanceToWarehouse;
+        if (state() == Agent::Full)
         {
-            distanceToWarehouse = v.disatnceToWarehouse;
-            if (state() == Agent::Full)
-            {
-                speed.angle = atan2(v.sender->pos().y() - pos().y(),
-                                    v.sender->pos().x() - pos().x());
-                emit newCommunication(this, v.sender);
-            }
-        }
-
-        if (v.distanceToResource < distanceToResource)
-        {
-            distanceToResource = v.distanceToResource;
-            if (state() == Agent::Empty)
-            {
-                speed.angle = atan2(v.sender->pos().y() - pos().y(),
-                                    v.sender->pos().x() - pos().x());
-                emit newCommunication(this, v.sender);
-            }
+            speed.angle = atan2(v.minDistanceToWarehouseSender->pos().y() - pos().y(),
+                                v.minDistanceToWarehouseSender->pos().x() - pos().x());
+            emit newCommunication(this, v.minDistanceToWarehouseSender);
         }
     }
+    v.minDistanceToWarehouseAccess.unlock();
 
+    if (v.minDistanceToResource < distanceToResource && v.minDistanceToResourceSender)
+    {
+        distanceToResource = v.minDistanceToResource;
+        if (state() == Agent::Empty)
+        {
+            speed.angle = atan2(v.minDistanceToResourceSender->pos().y() - pos().y(),
+                                v.minDistanceToResourceSender->pos().x() - pos().x());
+            emit newCommunication(this, v.minDistanceToResourceSender);
+        }
+    }
 }
 
 void Agent::setInitialSpeed()
@@ -141,24 +139,18 @@ void Agent::move()
             speed.angle -= 2 * PI;
     }
 
-
-//    emit movedFrom(position);
-
     position += {dx, dy};
     distanceToResource += speed.dist;
     distanceToWarehouse += speed.dist;
 
-//    emit movedTo(position);
-
     PointOfInterest* resourcePoi = pWorld->resourceAt(position, r);
     if (resourcePoi)
     {
-        if (agentState == Empty)
+        if (state() == Empty)
         {
             carriedResourceVolume = pWorld->grabResource(resourcePoi, capacity);
             if (!qFuzzyIsNull(carriedResourceVolume))
             {
-                agentState = Full;
                 emit stateChanged();
             }
         }
@@ -166,14 +158,14 @@ void Agent::move()
         speed.angle += PI;
     }
 
-    if (pWorld->isWarehouseAt(position, r))
+    PointOfInterest* warehousePoi = pWorld->warehouseAt(position, r);
+    if (warehousePoi)
     {
-        if (agentState == Full)
+        if (state() == Full)
         {
-            carriedResourceVolume = pWorld->dropResource(carriedResourceVolume);
+            carriedResourceVolume = pWorld->dropResource(warehousePoi, carriedResourceVolume);
             if (qFuzzyIsNull(carriedResourceVolume))
             {
-                agentState = Empty;
                 emit stateChanged();
             }
         }

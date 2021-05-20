@@ -3,22 +3,24 @@
 #include <QMutex>
 #include <QElapsedTimer>
 #include <QRandomGenerator>
+#include <QtConcurrent>
 
-bool operator < (const QPoint& a, const QPoint& b)
+Agent* World::generateNewAgent(QPointF position)
 {
-    return a.x() < b.x() || a.x() == b.x() && a.y() < b.y();
-}
-
-Agent* World::generateNewAgent()
-{
-    QMutexLocker lock(&agentListAccess);
-
     Agent* agent = new Agent(this);
-    agents.append(agent);
-    agent->setPos(randomWorldCoord(agent->radius()));
+    agent->setPos(position);
     connect (agent, &Agent::newCommunication, this, &World::onNewCommunication);
 
     emit agentCreated(agent);
+
+    QMutexLocker lock(&agentListAccess);
+/*
+    agents.begin()->append(agent);
+    if (agents.begin()->count() == 50)
+        agents.append(QVector<Agent*>());
+*/
+    agents.append(agent);
+
     return agent;
 }
 
@@ -27,12 +29,14 @@ void World::onStart()
     stopRequested = false;
     for (int i =0; i<AGENTS_COUNT; i++)
     {
-        generateNewAgent();
+        generateNewAgent( randomWorldCoord( 10 ) );
     }
 
-    onNewWarehouseRequest();
-    onNewResourceRequest();
-    onNewResourceRequest();
+    for (int i=0;i<3;i++)
+        onNewWarehouseRequest();
+
+    for (int i=0;i <5; i++)
+        onNewResourceRequest();
 
     iteration();
 }
@@ -42,8 +46,8 @@ PointOfInterest* World::generateResource()
     PointOfInterest* poi = new PointOfInterest;
     poi->radius = RESOURCE_INITIAL_RADIUS;
     poi->pos = randomWorldCoord(poi->radius);
-    poi->volume = PI * poi->radius * poi->radius;
-    poi->criticalVolume = poi->volume;
+    poi->setVolume(PI * poi->radius * poi->radius);
+    poi->criticalVolume = poi->volume();
     poi->color = QColor("blue");
     return poi;
 }
@@ -52,7 +56,7 @@ PointOfInterest* World::generateWarehouse()
 {
     PointOfInterest* poi = new PointOfInterest;
     poi->radius = WAREHOUSE_INITIAL_RADIUS;
-    poi->volume = 0;
+    poi->setVolume(0);
     poi->pos = randomWorldCoord(poi->radius);
     poi->criticalVolume = PI * pow(poi->radius, 2);
     poi->color = QColor("orange");
@@ -61,8 +65,15 @@ PointOfInterest* World::generateWarehouse()
 
 World::World(QObject *parent)
     :QObject(parent), size(WORLD_SIZE)
+#if QT_VERSION < 0x051400
+    ,agentListAccess(QMutex::Recursive)
+#endif
 {
     acousticSpace = new AcousticSpace(boundRect().toRect());
+
+    agents.append(QVector<Agent*>());
+
+    connect (this, &World::requestNewAgent, this, &World::generateNewAgent, Qt::QueuedConnection);
 }
 
 void World::stop()
@@ -111,6 +122,7 @@ qreal World::maxYcoord() const
 
 PointOfInterest *World::resourceAt(QPointF pos, quint16 r)
 {
+    QMutexLocker lock(&resourcesAccess);
     foreach(PointOfInterest* poi,pResources)
     {
         if ( poi->collaide(pos, r))
@@ -119,52 +131,54 @@ PointOfInterest *World::resourceAt(QPointF pos, quint16 r)
     return nullptr;
 }
 
-bool World::isWarehouseAt(QPointF pos, quint16 r)
+PointOfInterest* World::warehouseAt(QPointF pos, quint16 r)
 {
-    return pWarehouse?pWarehouse->collaide(pos, r):false;
+    foreach(PointOfInterest* poi,pWarehouse)
+    {
+        if ( poi->collaide(pos, r))
+            return poi;
+    }
+    return nullptr;
 }
 
 qreal World::grabResource(PointOfInterest *poi, qreal capacity)
 {
     QMutexLocker lock(&resourcesAccess);
-
     qreal ret = 0;
-    ret = qMin(poi->volume, capacity);
 
-    poi->volume -= ret;
-
-    if (poi->volume < capacity)
+    if (poi->valid)
     {
-        emit resourceDepleted(poi->pAvatar);
-        pResources.removeOne(poi);
-        poi->valid = false;
-        //delete poi;
-        onNewResourceRequest();
-    }
-    else
-    {
-        poi->radius = sqrt(poi->volume / PI);
-    }
+        ret = poi->decVolume(capacity);
 
+        if (poi->volume() < capacity)
+        {
+            emit resourceDepleted(poi);
+            poi->valid = false;
+            //delete poi;
+            onNewResourceRequest();
+        }
+        else
+        {
+            poi->radius = sqrt(poi->volume() / PI);
+        }
+    }
     return ret;
 }
 
-qreal World::dropResource(qreal volume)
+qreal World::dropResource(PointOfInterest* poi, qreal volume)
 {
     qreal ret = 0;
-    pWarehouse->volume += volume;
+    poi->incVolume(volume);
 
-    if (pWarehouse->volume > WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS)
+    if (poi->volume() > WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS)
     {
-        while (pWarehouse->volume > NEW_AGENT_RESOURCES_PRICE)
+        while (poi->tryDecVolume(NEW_AGENT_RESOURCES_PRICE) )
         {
-            Agent* agent = generateNewAgent();
-            agent->setPos(pWarehouse->pos + QPointF(pWarehouse->radius, 0));
-            pWarehouse->volume -= NEW_AGENT_RESOURCES_PRICE;
+            emit requestNewAgent(poi->pos + QPointF(poi->radius, 0));
         }
     }
 
-    pWarehouse->radius = sqrt(qMax(pWarehouse->volume, pWarehouse->criticalVolume) / PI);
+    poi->radius = sqrt(qMax(poi->volume(), poi->criticalVolume) / PI);
 
     return ret;
 }
@@ -181,23 +195,46 @@ void World::iteration()
     QElapsedTimer calcTime;
     calcTime.start();
     emit iterationStart();
+
+    foreach (PointOfInterest* poi, pResources)
+    {
+        if (poi->valid)
+            continue;
+        pResources.removeOne(poi);
+        delete poi;
+    }
+
+
     commLinesAccess.lock();
     communicatedAgents.clear();
     commLinesAccess.unlock();
 
-    agentListAccess.lock();
-    foreach (Agent* agent, agents)
-        agent->move();
-
-    agentListAccess.unlock();
-
     acousticSpace->clear();
 
-    foreach(Agent* agent, agents)
-        agent->acousticShout(*acousticSpace);
+    agentListAccess.lock();
+    QtConcurrent::blockingMap(agents, [this](Agent* agent)
+    {
+        //foreach(Agent* agent, cluster)
+        {
+            agent->move();
+            agent->acousticShout(*acousticSpace);
+            agent->acousticListen(*acousticSpace);
+        }
+    });
+    agentListAccess.unlock();
 
-    foreach(Agent* agent, agents)
-        agent->acousticListen(*acousticSpace);
+//    QtConcurrent::blockingMap(agents, [this](Agent* agent)
+//    {
+//        //foreach(Agent* agent, cluster)
+//          agent->acousticShout(*acousticSpace);
+//    });
+
+
+//    QtConcurrent::blockingMap(agents, [this](Agent* agent)
+//    {
+//        //foreach(Agent* agent, cluster)
+//    agent->acousticListen(*acousticSpace);
+//    });
 
     emit iterationEnd(calcTime.elapsed());
     //usleep(GRANULARITY_US);
@@ -206,12 +243,15 @@ void World::iteration()
 void World::onNewResourceRequest()
 {
     PointOfInterest* resource = generateResource();
-    emit resourceAppeared (resource);
     pResources.append( resource );
+
+    emit resourceAppeared (resource);
 }
 
 void World::onNewWarehouseRequest()
 {
-    pWarehouse = generateWarehouse();
-    emit warehouseAppeared(pWarehouse);
+    auto ptr = generateWarehouse();
+    pWarehouse.append(ptr);
+
+    emit warehouseAppeared(ptr);
 }

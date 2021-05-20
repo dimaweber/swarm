@@ -32,16 +32,14 @@ private:
     QGraphicsScene* scene;
 
     quint16 agentsCreatedCount = 0;
-    quint16 fullAgentsCount = 0;
-    quint16 emptyAgentsCount = 0;
 
-    QAbstractGraphicsShapeItem* createPoiAvatar(PointOfInterest& poi);
+    void createPoiAvatar(PointOfInterest& poi);
 
     quint32 frameCount = 0;
 private slots:
     void onResourceAppeared(PointOfInterest* poi);
     void onWarehouseAppeared(PointOfInterest* poi);
-    void onResourceDepleted(QAbstractGraphicsShapeItem *avatar);
+    void onResourceDepleted(PointOfInterest* poi);
     void onAgentCreated(Agent* a);
     void drawFrame(quint64 calcTime);
     void removeCommunicationLines();

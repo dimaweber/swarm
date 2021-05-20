@@ -55,18 +55,9 @@ QGraphicsView* MainWindow::view()
     return  ui->graphicsView;
 }
 
-QAbstractGraphicsShapeItem* MainWindow::createPoiAvatar(PointOfInterest& poi)
+void MainWindow::createPoiAvatar(PointOfInterest& poi)
 {
-    QBrush brush(poi.color);
-    QPen pen;
-    pen.setWidth(2);
-
-
-    QGraphicsEllipseItem* gItem = scene->addEllipse(poi.boundRect(), pen, brush);
-    gItem->setPos(poi.pos);
-
-    poi.pAvatar = gItem;
-    return gItem;
+    poi.buildAvatar(scene);
 }
 
 void MainWindow::onResourceAppeared(PointOfInterest* poi)
@@ -77,30 +68,20 @@ void MainWindow::onResourceAppeared(PointOfInterest* poi)
 void MainWindow::onWarehouseAppeared(PointOfInterest* poi)
 {
     createPoiAvatar(*poi);
-    QBrush b = poi->pAvatar->brush();
-    QColor c = b.color();
-    c.setAlpha( 0);
-    b.setColor(c);
-    poi->pAvatar->setBrush(b);
+    poi->avatar()->setAlpha(0);
 }
 
-void MainWindow::onResourceDepleted(QAbstractGraphicsShapeItem* avatar)
+void MainWindow::onResourceDepleted(PointOfInterest *poi)
 {
-    if (avatar)
-        scene->removeItem(avatar);
+    if (poi)
+        poi->avatar()->destroy();
 }
 
 void MainWindow::onAgentCreated(Agent *a)
 {
     a->buildAvatar(scene);
 
-    if (a->state() == Agent::Empty)
-        emptyAgentsCount++;
-    else
-        fullAgentsCount++;
     agentsCreatedCount++;
-    ui->emptyAgentsCount->setNum(emptyAgentsCount);
-    ui->fullAgentsCount->setNum(fullAgentsCount);
     ui->agentsCountLabel->setNum(agentsCreatedCount);
 }
 
@@ -108,70 +89,67 @@ void MainWindow::drawFrame(quint64 calcTime)
 {
     QElapsedTimer renderTimer;
     renderTimer.start();
-    auto& agents = world.agentList();
-    emptyAgentsCount = 0;
-    fullAgentsCount = 0;
-    foreach(Agent* agent, agents)
+    quint16 fullAgentsCount = 0;
+    quint16 emptyAgentsCount = 0;
+    world.forEachAgent([&fullAgentsCount, &emptyAgentsCount](Agent* agent)
     {
         agent->avatar()->setPos(agent->pos());
 
         agent->avatar()->setBrush(agent->brush());
         if (agent->state() == Agent::Empty)
-        {
             ++emptyAgentsCount;
-            //--fullAgentsCount;
-        }
         else
-        {
-            //--emptyAgentsCount;
             ++fullAgentsCount;
-        }
-    }
-    world.agentListRealease();
+    });
+
     ui->emptyAgentsCount->setNum(emptyAgentsCount);
     ui->fullAgentsCount->setNum(fullAgentsCount);
 
-    auto& comm = world.commLines();
-    QPen redPen(QColor("red"));
-    QPen greenPen(QColor("green"));
+    QColor redColor("red");
+    QColor greenColor("green");
+    redColor.setAlphaF(0.2);
+    greenColor.setAlphaF(0.2);
+    QPen redPen(redColor);
+    QPen greenPen(greenColor);
     redPen.setWidth(2);
     greenPen.setWidth(2);
 
-    foreach (auto& l, comm)
+    if (ui->showCommunicationLinesCheckbox->isChecked())
     {
-        QLineF line(l.first->pos(), l.second->pos());
-        communicationLines.append(scene->addLine(line, l.first->state()==Agent::Empty?redPen:greenPen));
-    }
-    world.commLinesRelease();
-
-    world.warehouse()->pAvatar->setRect(world.warehouse()->boundRect());
-    if (world.warehouse()->volume < world.warehouse()->criticalVolume)
-    {
-        QPen p = world.warehouse()->pAvatar->pen();
-        p.setWidth(1);
-        QBrush b = world.warehouse()->pAvatar->brush();
-        QColor c = b.color();
-        c.setAlpha( world.warehouse()->volume / world.warehouse()->criticalVolume * 255);
-        b.setColor(c);
-        world.warehouse()->pAvatar->setBrush(b);
-        world.warehouse()->pAvatar->setPen(p);
-    }
-    else
-    {
-        QPen p = world.warehouse()->pAvatar->pen();
-        p.setWidth(3);
-
-        world.warehouse()->pAvatar->setPen(p);
+        auto& comm = world.commLines();
+        foreach (auto& l, comm)
+        {
+            QLineF line(l.first->pos(), l.second->pos());
+            communicationLines.append(scene->addLine(line, l.first->state()==Agent::Empty?redPen:greenPen));
+        }
+        world.commLinesRelease();
     }
 
-
-    foreach(PointOfInterest* resource, world.resourcesList())
+    foreach (PointOfInterest* warehouse, world.warehouseList())
     {
-        resource->pAvatar->setRect(resource->boundRect());
+        auto pAvatar = warehouse->avatar();
+        pAvatar->setRect(warehouse->boundRect());
+        if (warehouse->volume() < warehouse->criticalVolume)
+        {
+            pAvatar->setBorderWidth(1);
+            pAvatar->setAlpha( warehouse->volume() / warehouse->criticalVolume * 255);
+        }
+        else
+        {
+            pAvatar->setBorderWidth(3);
+        }
     }
-    world.resourcesListRelease();
 
-    ui->warehouseVolumeLabel->setNum(world.warehouse()->volume);
+    world.forEachResource([](PointOfInterest* resource)
+    {
+        resource->avatar()->setRect(resource->boundRect());
+    });
+
+    quint32 volSum = 0;
+    foreach (PointOfInterest* warehouse, world.warehouseList()) {
+        volSum += warehouse->volume();
+    }
+    ui->warehouseVolumeLabel->setNum((double)volSum);
 
     emit readyForNewFrame();
 
@@ -183,8 +161,7 @@ void MainWindow::drawFrame(quint64 calcTime)
 void MainWindow::removeCommunicationLines()
 {
     foreach(auto l, communicationLines)
-    {
         scene->removeItem(l);
-    }
+
     communicationLines.clear();
 }

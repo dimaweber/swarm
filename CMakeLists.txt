@@ -24,8 +24,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #    endif()
 #endif()
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets LinguistTools REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets LinguistTools REQUIRED)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets LinguistTools Concurrent REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets LinguistTools Concurrent REQUIRED)
 
 #set(TS_FILES swarm_ru_RU.ts)
 
@@ -34,10 +34,12 @@ set(PROJECT_SOURCES
         mainwindow.cpp
         world.cpp
         agent.cpp
+        poi.cpp
         mainwindow.h
         mainwindow.ui
         world.h
         agent.h
+        poi.h
         ${TS_FILES}
 )
 
@@ -62,7 +64,7 @@ else()
     qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
-target_link_libraries(swarm PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(swarm PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent)
 
 set_target_properties(swarm PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com

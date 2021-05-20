@@ -11,15 +11,15 @@ class QGraphicsItem;
 
 struct AgentAvatar
 {
-    QGraphicsItemGroup* grp;
-    QGraphicsEllipseItem* body;
-    QGraphicsEllipseItem* aura;
+    QGraphicsItemGroup* grp = nullptr;
+    QGraphicsEllipseItem* body = nullptr;
+    QGraphicsEllipseItem* aura = nullptr;
 
     void setPos(QPointF p)
-    { grp->setPos(p);}
+    { if (grp) grp->setPos(p);}
 
     void setBrush(QBrush b)
-    { body->setBrush(b); }
+    { if (body) body->setBrush(b); }
 };
 
 class Agent : public QObject
@@ -35,7 +35,7 @@ private:
     };
 
     QPointF position;
-    qreal r=2.5;
+    qreal r=1;
     qreal capacity = 1.0;
     qreal carriedResourceVolume = 0;
     qreal shoutRange = 50;
@@ -45,12 +45,12 @@ private:
     QPen   penEmpty;
     QPen   penFull;
     AgentSpeed speed;
-    State agentState;
+    //State agentState;
 
     World* pWorld;
 
-    quint16 distanceToResource = 0;
-    quint16 distanceToWarehouse = 0;
+    quint16 distanceToResource = 10000;
+    quint16 distanceToWarehouse = 10000;
 
     AgentAvatar  avtr;
 public:

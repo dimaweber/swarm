@@ -216,9 +216,25 @@ void World::iteration()
     {
         //foreach(Agent* agent, cluster)
         {
-            agent->move();
-            agent->acousticShout(*acousticSpace);
-            agent->acousticListen(*acousticSpace);
+            if (agent->state() == Agent::Dead)
+            {
+                if (agent->avatar()->valid)
+                {
+                    agent->avatar()->valid = false;
+                    emit agentDied(agent);
+                }
+                else
+                {
+                    agents.removeOne(agent);
+                    //delete agent;
+                }
+            }
+            else
+            {
+                agent->move();
+                agent->acousticShout(*acousticSpace);
+                agent->acousticListen(*acousticSpace);
+            }
         }
     });
     agentListAccess.unlock();

@@ -11,6 +11,8 @@ Agent::Agent(World *world, QPointF initialPosition, QObject *parent)
         position = initialPosition;
 
     capacity = PI * r * r;
+
+    ttl = QRandomGenerator::system()->bounded(6000, 10000);
 }
 
 QRectF Agent::boundRect() const
@@ -46,6 +48,8 @@ void Agent::buildAvatar(QGraphicsScene *scene)
 
 Agent::State Agent::state() const
 {
+    if (ttl == 0)
+        return Dead;
     return qFuzzyIsNull(carriedResourceVolume)?Empty:Full;
 }
 
@@ -106,6 +110,9 @@ void Agent::setInitialCoord()
 
 void Agent::move()
 {
+    if (--ttl == 0)
+        return;
+
     bool changeDirection = false;
     qreal dx = speed.dist * cos(speed.angle);
     qreal dy = speed.dist * sin(speed.angle);
@@ -149,10 +156,6 @@ void Agent::move()
         if (state() == Empty)
         {
             carriedResourceVolume = pWorld->grabResource(resourcePoi, capacity);
-            if (!qFuzzyIsNull(carriedResourceVolume))
-            {
-                emit stateChanged();
-            }
         }
         distanceToResource = 0;
         speed.angle += PI;
@@ -164,10 +167,7 @@ void Agent::move()
         if (state() == Full)
         {
             carriedResourceVolume = pWorld->dropResource(warehousePoi, carriedResourceVolume);
-            if (qFuzzyIsNull(carriedResourceVolume))
-            {
-                emit stateChanged();
-            }
+
         }
         speed.angle += PI;
         distanceToWarehouse = 0;

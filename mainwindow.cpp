@@ -36,6 +36,7 @@ MainWindow::MainWindow(World &world, QWidget *parent)
     scene->addEllipse( 498,  -502, 5, 5, QPen("red"), QBrush("blue"));
 
     connect (&world, &World::agentCreated, this, &MainWindow::onAgentCreated);
+    connect (&world, &World::agentDied, this, &MainWindow::onAgentDied, Qt::QueuedConnection);
     connect (&world, &World::resourceAppeared, this, &MainWindow::onResourceAppeared);
     connect (&world, &World::warehouseAppeared, this, &MainWindow::onWarehouseAppeared);
     connect (&world, &World::resourceDepleted, this, &MainWindow::onResourceDepleted);
@@ -81,8 +82,13 @@ void MainWindow::onAgentCreated(Agent *a)
 {
     a->buildAvatar(scene);
 
-    agentsCreatedCount++;
-    ui->agentsCountLabel->setNum(agentsCreatedCount);
+    ui->agentsCountLabel->setNum(++agentsCreatedCount);
+}
+
+void MainWindow::onAgentDied(Agent *a)
+{
+    a->avatar()->destroy();
+    ui->agentsCountLabel->setNum( --agentsCreatedCount);
 }
 
 void MainWindow::drawFrame(quint64 calcTime)
@@ -93,13 +99,16 @@ void MainWindow::drawFrame(quint64 calcTime)
     quint16 emptyAgentsCount = 0;
     world.forEachAgent([&fullAgentsCount, &emptyAgentsCount](Agent* agent)
     {
-        agent->avatar()->setPos(agent->pos());
+        if (agent->avatar()->valid)
+        {
+            agent->avatar()->setPos(agent->pos());
 
-        agent->avatar()->setBrush(agent->brush());
-        if (agent->state() == Agent::Empty)
-            ++emptyAgentsCount;
-        else
-            ++fullAgentsCount;
+            agent->avatar()->setBrush(agent->brush());
+            if (agent->state() == Agent::Empty)
+                ++emptyAgentsCount;
+            else
+                ++fullAgentsCount;
+        }
     });
 
     ui->emptyAgentsCount->setNum(emptyAgentsCount);

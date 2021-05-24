@@ -20,7 +20,7 @@
 
 const qreal PI = 3.1415926;
 
-const quint16 AGENTS_COUNT = 400;
+const quint16 AGENTS_COUNT = 600;
 const quint16 GRANULARITY_US = 1000;
 const quint32 WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS = 1000;
 const quint32 NEW_AGENT_RESOURCES_PRICE = 100;
@@ -223,6 +223,7 @@ public slots:
     void onStart();
 signals:
     void agentCreated(Agent* a);
+    void agentDied(Agent* );
     void resourceDepleted(PointOfInterest* );
     void resourceAppeared(PointOfInterest* );
     void warehouseAppeared(PointOfInterest* );

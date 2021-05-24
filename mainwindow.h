@@ -41,6 +41,7 @@ private slots:
     void onWarehouseAppeared(PointOfInterest* poi);
     void onResourceDepleted(PointOfInterest* poi);
     void onAgentCreated(Agent* a);
+    void onAgentDied(Agent* a);
     void drawFrame(quint64 calcTime);
     void removeCommunicationLines();
 

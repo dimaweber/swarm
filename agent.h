@@ -14,19 +14,32 @@ struct AgentAvatar
     QGraphicsItemGroup* grp = nullptr;
     QGraphicsEllipseItem* body = nullptr;
     QGraphicsEllipseItem* aura = nullptr;
+    bool valid = true;
 
     void setPos(QPointF p)
     { if (grp) grp->setPos(p);}
 
     void setBrush(QBrush b)
     { if (body) body->setBrush(b); }
+
+    void destroy()
+    {
+        QGraphicsScene* scene = body->scene();
+        scene->removeItem(aura);
+        scene->removeItem(body);
+        scene->removeItem(aura);
+
+        grp = nullptr;
+        body = nullptr;
+        aura = nullptr;
+    }
 };
 
 class Agent : public QObject
 {
     Q_OBJECT
 public:
-    enum State {Empty, Full};
+    enum State {Empty, Full, Dead};
 private:
     struct AgentSpeed
     {
@@ -39,6 +52,7 @@ private:
     qreal capacity = 1.0;
     qreal carriedResourceVolume = 0;
     qreal shoutRange = 50;
+    int ttl = 1000;
 
     QBrush brushEmpty;
     QBrush brushFull;
@@ -85,7 +99,6 @@ private slots:
 signals:
     void movedTo(QPointF);
     void movedFrom(QPointF);
-    void stateChanged();
 
     void anounceDistances();
     void newCommunication(Agent*, Agent*);

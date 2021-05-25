@@ -5,6 +5,7 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsScene>
 
+#include <math.h>
 
 PointOfInterest::PointOfInterest()
     :accessMutex(QReadWriteLock::Recursive)

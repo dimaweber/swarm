@@ -21,7 +21,7 @@ class MainWindow : public QDialog
     Q_OBJECT
 
     World& world;
-    QVector<QGraphicsItem*> communicationLines;
+    QVector<QPair<QGraphicsItem*, int>> communicationLines;
 public:
     MainWindow(World &world, QWidget *parent = nullptr);
     ~MainWindow();

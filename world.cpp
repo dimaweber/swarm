@@ -29,7 +29,25 @@ void World::onStart()
     stopRequested = false;
     for (int i =0; i<AGENTS_COUNT; i++)
     {
-        generateNewAgent( randomWorldCoord( 10 ) );
+        bool ok = true;
+        QPointF pos;
+        do
+        {
+            pos = randomWorldCoord(10);
+            foreach (PointOfInterest* resPo, pResources)
+                if (resPo->collaide(pos, 10))
+                {
+                    ok = false;
+                }
+            foreach (PointOfInterest* resPo, pWarehouse)
+                if (resPo->collaide(pos, 10))
+                {
+                    ok = false;
+                }
+
+        } while (!ok);
+
+        generateNewAgent( pos );
     }
 
     for (int i=0;i<3;i++)
@@ -212,7 +230,8 @@ void World::iteration()
     acousticSpace->clear();
 
     agentListAccess.lock();
-    QtConcurrent::blockingMap(agents, [this](Agent* agent)
+
+    auto agentActions = [this](Agent* agent)
     {
         //foreach(Agent* agent, cluster)
         {
@@ -236,7 +255,10 @@ void World::iteration()
                 agent->acousticListen(*acousticSpace);
             }
         }
-    });
+    };
+
+    QtConcurrent::blockingMap(agents, agentActions);
+
     agentListAccess.unlock();
 
 //    QtConcurrent::blockingMap(agents, [this](Agent* agent)

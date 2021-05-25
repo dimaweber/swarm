@@ -18,9 +18,11 @@
 #include <QReadWriteLock>
 #include <QMap>
 
+#include <math.h>
+
 const qreal PI = 3.1415926;
 
-const quint16 AGENTS_COUNT = 600;
+const quint16 AGENTS_COUNT = 500;
 const quint16 GRANULARITY_US = 1000;
 const quint32 WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS = 1000;
 const quint32 NEW_AGENT_RESOURCES_PRICE = 77 ;
@@ -32,11 +34,11 @@ class Agent;
 
 struct AcousticMessage
 {
-    QReadWriteLock minDistanceToResourceAccess;
+    QMutex minDistanceToResourceAccess;
     qreal minDistanceToResource = -1;
     Agent* minDistanceToResourceSender = nullptr;
 
-    QReadWriteLock minDistanceToWarehouseAccess;
+    QMutex minDistanceToWarehouseAccess;
     qreal minDistanceToWarehouse = -1;
     Agent* minDistanceToWarehouseSender = nullptr;
 
@@ -112,11 +114,9 @@ public:
             int y_index = acousticCoord.y() - boundRect.top();
             if (x_index >=0 && y_index >= 0 && x_index < boundRect.width() && y_index<boundRect.height())
             {
-                space[x_index][y_index].minDistanceToResourceAccess.lockForRead();
+                space[x_index][y_index].minDistanceToResourceAccess.lock();
                 if (space[x_index][y_index].minDistanceToResource > msg.minDistanceToResource || !space[x_index][y_index].minDistanceToResourceSender)
                 {
-                    space[x_index][y_index].minDistanceToResourceAccess.unlock();
-                    space[x_index][y_index].minDistanceToResourceAccess.lockForWrite();
                     if (space[x_index][y_index].minDistanceToResource > msg.minDistanceToResource || !space[x_index][y_index].minDistanceToResourceSender)
                     {
                         space[x_index][y_index].minDistanceToResource = msg.minDistanceToResource;
@@ -125,11 +125,9 @@ public:
                 }
                 space[x_index][y_index].minDistanceToResourceAccess.unlock();
 
-                space[x_index][y_index].minDistanceToWarehouseAccess.lockForRead();
+                space[x_index][y_index].minDistanceToWarehouseAccess.lock();
                 if (space[x_index][y_index].minDistanceToWarehouse > msg.minDistanceToWarehouse || !space[x_index][y_index].minDistanceToWarehouseSender)
                 {
-                    space[x_index][y_index].minDistanceToWarehouseAccess.unlock();
-                    space[x_index][y_index].minDistanceToWarehouseAccess.lockForWrite();
                     if (space[x_index][y_index].minDistanceToWarehouse > msg.minDistanceToWarehouse || !space[x_index][y_index].minDistanceToWarehouseSender)
                     {
                         space[x_index][y_index].minDistanceToWarehouse = msg.minDistanceToWarehouse;

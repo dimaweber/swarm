@@ -102,6 +102,7 @@ void MainWindow::drawFrame(quint64 calcTime)
         if (agent->avatar()->valid)
         {
             agent->avatar()->setPos(agent->pos());
+            agent->avatar()->setRotate(agent->direction());
 
             agent->avatar()->setBrush(agent->brush());
             agent->avatar()->setPen(agent->pen());
@@ -130,7 +131,7 @@ void MainWindow::drawFrame(quint64 calcTime)
         foreach (auto& l, comm)
         {
             QLineF line(l.first->pos(), l.second->pos());
-            communicationLines.append(scene->addLine(line, l.first->state()==Agent::Empty?redPen:greenPen));
+            communicationLines.append({scene->addLine(line, l.first->state()==Agent::Empty?redPen:greenPen), 5});
         }
         world.commLinesRelease();
     }
@@ -171,8 +172,19 @@ void MainWindow::drawFrame(quint64 calcTime)
 
 void MainWindow::removeCommunicationLines()
 {
-    foreach(auto l, communicationLines)
-        scene->removeItem(l);
+    for(int i=0; i<communicationLines.count(); i++)
+    {
+        auto& l = communicationLines[i];
+        if (--l.second <= 0)
+        {
+            scene->removeItem(l.first);
+            communicationLines.removeAt(i);
+        }
+        else
+        {
+            l.first->setOpacity(l.second / 5.0);
+        }
+    }
 
-    communicationLines.clear();
+    //communicationLines.clear();
 }

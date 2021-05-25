@@ -39,9 +39,17 @@ AgentAvatar* Agent::avatar() {return &avtr; }
 
 void Agent::buildAvatar(QGraphicsScene *scene)
 {
-    avtr.body = scene->addEllipse(boundRect(), pen(), brush());
+    QPolygonF poly;
+    for(qreal angle=0; angle < 2*PI; angle += 2*PI/3)
+    {
+        poly.append({r*cos(angle + PI/2), r*sin(angle+PI/2)});
+    }
+    avtr.body = scene->addEllipse(boundRect(), pen());
+    avtr.direct = scene->addPolygon(poly, pen(), brush());
     avtr.aura = scene->addEllipse({-shoutRange, -shoutRange, 2*shoutRange, 2*shoutRange});
-    avtr.grp = scene->createItemGroup({avtr.body, avtr.aura});
+    avtr.head = scene->addLine(0, r, 0, r+3, pen());
+
+    avtr.grp = scene->createItemGroup({avtr.body, avtr.aura, avtr.direct, avtr.head});
 
     avtr.aura->hide();
 }
@@ -53,9 +61,9 @@ Agent::State Agent::state() const
     return qFuzzyIsNull(carriedResourceVolume)?Empty:Full;
 }
 
-qreal Agent::sqDistanceTo(QPointF a, QPointF b)
+qreal Agent::sqDistanceTo(QPointF a)
 {
-    return pow(a.x()-b.x(), 2) + pow(a.y()-b.y(), 2);
+    return pow(pos().x()-a.x(), 2) + pow(a.y()-position.y(), 2);
 }
 
 void Agent::acousticShout(AcousticSpace& space)
@@ -66,16 +74,16 @@ void Agent::acousticShout(AcousticSpace& space)
     msg.minDistanceToResource = distanceToResource+shoutRange;
     msg.minDistanceToWarehouseSender = this;
 
-    space.shout(msg, pos().toPoint(), shoutRange);
+    space.shout(msg, pos().toPoint(), (int)shoutRange);
 }
 
 void Agent::acousticListen(AcousticSpace &space)
 {
     AcousticMessage& v = space.cell(pos());
-    v.minDistanceToWarehouseAccess.lockForRead();
+    v.minDistanceToWarehouseAccess.lock();
     if (v.minDistanceToWarehouse < distanceToWarehouse && v.minDistanceToWarehouseSender)
     {
-        distanceToWarehouse = v.minDistanceToWarehouse;
+        distanceToWarehouse = static_cast<quint32>(v.minDistanceToWarehouse);
         if (state() == Agent::Full)
         {
             speed.angle = atan2(v.minDistanceToWarehouseSender->pos().y() - pos().y(),
@@ -87,7 +95,7 @@ void Agent::acousticListen(AcousticSpace &space)
 
     if (v.minDistanceToResource < distanceToResource && v.minDistanceToResourceSender)
     {
-        distanceToResource = v.minDistanceToResource;
+        distanceToResource = static_cast<quint32>(v.minDistanceToResource);
         if (state() == Agent::Empty)
         {
             speed.angle = atan2(v.minDistanceToResourceSender->pos().y() - pos().y(),
@@ -159,6 +167,19 @@ void Agent::move()
         }
         distanceToResource = 0;
         speed.angle += PI;
+        position -= {dx,dy};
+
+        /*
+        if (sqDistanceTo(resourcePoi->pos) < pow(resourcePoi->radius+radius(), 2))
+        {
+            // we're inside resource, move to edge
+            qreal s = sqrt(pow(resourcePoi->pos.x()-pos().x(), 2)+pow(resourcePoi->pos.y()-pos().y(), 2)) / (pos().x()-resourcePoi->pos.x());
+            qreal c = sqrt(pow(resourcePoi->pos.x()-pos().x(), 2)+pow(resourcePoi->pos.y()-pos().y(), 2)) / (pos().y()-resourcePoi->pos.y());
+            qreal x = resourcePoi->radius * c + resourcePoi->pos.x();
+            qreal y = resourcePoi->radius * s + resourcePoi->pos.y();
+            position = {x, y};
+        }
+        */
     }
 
     PointOfInterest* warehousePoi = pWorld->warehouseAt(position, r);
@@ -171,5 +192,18 @@ void Agent::move()
         }
         speed.angle += PI;
         distanceToWarehouse = 0;
+        position -= {dx,dy};
+
+        if (sqDistanceTo(warehousePoi->pos) < pow(warehousePoi->radius+radius(), 2))
+        {
+            // we're inside resource, move to edge
+
+//            qreal s = sqrt(pow(warehousePoi->pos.x()-pos().x(), 2)+pow(warehousePoi->pos.y()-pos().y(), 2)) / (pos().x()-warehousePoi->pos.x());
+//            qreal c = sqrt(pow(warehousePoi->pos.x()-pos().x(), 2)+pow(warehousePoi->pos.y()-pos().y(), 2)) / (pos().y()-warehousePoi->pos.y());
+//            qreal x = (warehousePoi->radius + radius()) * c + warehousePoi->pos.x();
+//            qreal y = (warehousePoi->radius + radius()) * s + warehousePoi->pos.y();
+//            position = {x, y};
+
+        }
     }
 }

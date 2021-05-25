@@ -22,6 +22,9 @@ struct AgentAvatar
     void setBrush(QBrush b)
     { if (body) body->setBrush(b); }
 
+    void setPen(QPen p)
+    { if (body) body->setPen(p); }
+
     void destroy()
     {
         QGraphicsScene* scene = body->scene();

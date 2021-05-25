@@ -104,6 +104,7 @@ void MainWindow::drawFrame(quint64 calcTime)
             agent->avatar()->setPos(agent->pos());
 
             agent->avatar()->setBrush(agent->brush());
+            agent->avatar()->setPen(agent->pen());
             if (agent->state() == Agent::Empty)
                 ++emptyAgentsCount;
             else

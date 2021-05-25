@@ -160,7 +160,8 @@ void MainWindow::drawFrame(quint64 calcTime)
     }
     ui->warehouseVolumeLabel->setNum((double)volSum);
 
-    emit readyForNewFrame();
+    if (agentsCreatedCount)
+        emit readyForNewFrame();
 
     ui->calcTimeLabel->setNum((double)calcTime);
     ui->renderTimeLabel->setNum((double)renderTimer.elapsed());

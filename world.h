@@ -20,15 +20,14 @@
 
 #include <math.h>
 
-const qreal PI = 3.1415926;
-
 const quint16 AGENTS_COUNT = 500;
 const quint16 GRANULARITY_US = 1000;
 const quint32 WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS = 1000;
 const quint32 NEW_AGENT_RESOURCES_PRICE = 77 ;
-const QSize WORLD_SIZE(800, 800);
+const QSize DEFAULT_WORLD_SIZE(800, 800);
 const qreal WAREHOUSE_INITIAL_RADIUS = 25;
 const qreal RESOURCE_INITIAL_RADIUS = 25;
+const qreal DEFAULT_INITIAL_AGENT_RADIUS = 5;
 
 class Agent;
 
@@ -148,14 +147,14 @@ class World : public QObject
     AcousticSpace* acousticSpace = nullptr;
 
     QSize size;
-    QList<PointOfInterest*> pResources;
-    QList<PointOfInterest*> pWarehouse;
+    QList<WorldObject*> pResources;
+    QList<WorldObject*> pWarehouse;
     //QVector<QVector<Agent*>> agents;
     QVector<Agent*> agents;
     bool stopRequested = false;
 
-    PointOfInterest* generateResource();
-    PointOfInterest* generateWarehouse();
+    WorldObject* generateResource();
+    WorldObject* generateWarehouse();
 
     QVector<QPair<const Agent*, const Agent*>> communicatedAgents;
 public:
@@ -170,20 +169,20 @@ public:
     qreal minYcoord() const;
     qreal maxYcoord() const;
 
-    PointOfInterest* resourceAt(QPointF pos, quint16 r);
-    PointOfInterest* warehouseAt(QPointF pos, quint16 r);
+    WorldObject* resourceAt(QPointF pos, quint16 r);
+    WorldObject* warehouseAt(QPointF pos, quint16 r);
 
-    qreal grabResource(PointOfInterest* poi, qreal capacity);
-    qreal dropResource(PointOfInterest* poi, qreal volume);
+    qreal grabResource(WorldObject* poi, qreal capacity);
+    qreal dropResource(WorldObject* wo, qreal volume);
 
     QMutex commLinesAccess;
     const QVector<QPair<const Agent*, const Agent*>>& commLines() {commLinesAccess.lock(); return communicatedAgents;}
     void  commLinesRelease()  {commLinesAccess.unlock();}
 
-#if QT_VERSION >= 0x051400
-    QRecursiveMutex agentListAccess;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    mutable QRecursiveMutex agentListAccess;
 #else
-    QMutex agentListAccess;
+    mutable QMutex agentListAccess;
 #endif
     //const QVector<Agent*>& agentList() { agentListAccess.lock(); return agents; }
     //void agentListRealease() { agentListAccess.unlock();}
@@ -196,14 +195,41 @@ public:
                 f(agent);
         }
     }
+    void forEachAgent(std::function<void(const Agent*)> f) const
+    {
+        QMutexLocker lock(&agentListAccess);
+        //foreach (QVector<Agent*> cluster, agents)
+        {
+            foreach(const Agent* agent, agents)
+                f(agent);
+        }
+    }
 
-    const QList<PointOfInterest*> warehouseList() const { return pWarehouse; }
-
-    QMutex resourcesAccess;
-    void forEachResource(std::function<void(PointOfInterest*)> f)
+    mutable QMutex resourcesAccess;
+    void forEachResource(std::function<void(WorldObject*)> f)
     {
         QMutexLocker lock(&resourcesAccess);
-        foreach(PointOfInterest* poi, pResources)
+        foreach(WorldObject* poi, pResources)
+            f(poi);
+    }
+    void forEachResource(std::function<void(const WorldObject*)> f) const
+    {
+        QMutexLocker lock(&resourcesAccess);
+        foreach(WorldObject* poi, pResources)
+            f(poi);
+    }
+
+    mutable QMutex warehouseAccess;
+    void forEachWarehouse(std::function<void(WorldObject*)> f)
+    {
+        QMutexLocker lock(&warehouseAccess);
+        foreach(WorldObject* poi, pWarehouse)
+            f(poi);
+    }
+    void forEachWarehouse(std::function<void(const WorldObject*)> f) const
+    {
+        QMutexLocker lock(&warehouseAccess);
+        foreach(WorldObject* poi, pWarehouse)
             f(poi);
     }
 
@@ -219,15 +245,19 @@ public slots:
     void iteration();
 
     void onStart();
+
+    void read (const QJsonObject& json);
+    void write (QJsonObject& json) const;
+
 signals:
     void agentCreated(Agent* a);
     void agentDied(Agent* );
-    void resourceDepleted(PointOfInterest* );
-    void resourceAppeared(PointOfInterest* );
-    void warehouseAppeared(PointOfInterest* );
+    void resourceDepleted(WorldObject* );
+    void resourceAppeared(WorldObject* );
+    void warehouseAppeared(WorldObject* );
 
     void iterationStart();
-    void iterationEnd(quint64);
+    void iterationEnd(qint64);
 
     void requestNewAgent(QPointF);
 };

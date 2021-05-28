@@ -33,18 +33,19 @@ private:
 
     quint16 agentsCreatedCount = 0;
 
-    void createPoiAvatar(PointOfInterest& poi);
+    void createPoiAvatar(WorldObject& poi);
 
     quint32 frameCount = 0;
 private slots:
-    void onResourceAppeared(PointOfInterest* poi);
-    void onWarehouseAppeared(PointOfInterest* poi);
-    void onResourceDepleted(PointOfInterest* poi);
+    void onResourceAppeared(WorldObject* poi);
+    void onWarehouseAppeared(WorldObject* poi);
+    void onResourceDepleted(WorldObject* poi);
     void onAgentCreated(Agent* a);
     void onAgentDied(Agent* a);
-    void drawFrame(quint64 calcTime);
+    void drawFrame(qint64 calcTime);
     void removeCommunicationLines();
 
+    bool save();
 signals:
     void newResourceRequest();
     void readyForNewFrame();

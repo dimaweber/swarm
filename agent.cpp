@@ -1,39 +1,24 @@
 #include "agent.h"
 #include <QRandomGenerator>
+#include <QJsonObject>
 
 Agent::Agent(World *world, QPointF initialPosition, QObject *parent)
-    :QObject(parent), brushEmpty(QColor("red")), brushFull(QColor("green")), penEmpty("red"), penFull("green"), pWorld(world)
+    : WorldObject(parent), colorEmpty(QColor("red")), colorFull(QColor("green")), pWorld(world)
 {
     setInitialSpeed();
     if (initialPosition == QPointF())
         setInitialCoord();
     else
-        position = initialPosition;
-
-    capacity = PI * r * r;
+        setPos( initialPosition );
 
     ttl = QRandomGenerator::system()->bounded(6000, 10000);
 }
 
-QRectF Agent::boundRect() const
+QColor Agent::color() const
 {
-    return {-r, -r, 2*r, 2*r};
+    return (state() == Empty)?colorEmpty : colorFull;
 }
 
-QBrush Agent::brush() const
-{
-    return (state() == Empty)?brushEmpty : brushFull;
-}
-
-QPen Agent::pen() const
-{
-    return (state() == Empty)?penEmpty : penFull;
-}
-
-QPointF Agent::pos() const
-{
-    return position;
-}
 
 AgentAvatar* Agent::avatar() {return &avtr; }
 
@@ -42,12 +27,12 @@ void Agent::buildAvatar(QGraphicsScene *scene)
     QPolygonF poly;
     for(qreal angle=0; angle < 2*PI; angle += 2*PI/3)
     {
-        poly.append({r*cos(angle + PI/2), r*sin(angle+PI/2)});
+        poly.append({radius()*cos(angle + PI/2), radius()*sin(angle+PI/2)});
     }
-    avtr.body = scene->addEllipse(boundRect(), pen());
-    avtr.direct = scene->addPolygon(poly, pen(), brush());
+    avtr.body = scene->addEllipse(boundRect(), color());
+    avtr.direct = scene->addPolygon(poly, color(), color());
     avtr.aura = scene->addEllipse({-shoutRange, -shoutRange, 2*shoutRange, 2*shoutRange});
-    avtr.head = scene->addLine(0, r, 0, r+3, pen());
+    avtr.head = scene->addLine(0, radius(), 0, radius()+3, color());
 
     avtr.grp = scene->createItemGroup({avtr.body, avtr.aura, avtr.direct, avtr.head});
 
@@ -58,12 +43,7 @@ Agent::State Agent::state() const
 {
     if (ttl == 0)
         return Dead;
-    return qFuzzyIsNull(carriedResourceVolume)?Empty:Full;
-}
-
-qreal Agent::sqDistanceTo(QPointF a)
-{
-    return pow(pos().x()-a.x(), 2) + pow(a.y()-position.y(), 2);
+    return qFuzzyIsNull(volume())?Empty:Full;
 }
 
 void Agent::acousticShout(AcousticSpace& space)
@@ -105,6 +85,27 @@ void Agent::acousticListen(AcousticSpace &space)
     }
 }
 
+void Agent::read(const QJsonObject &json)
+{
+    WorldObject::read(json);
+
+    if (json.contains("speed") && json["speed"].isObject())
+    {
+        speed.angle = json["speed"].toObject()["angle"].toDouble();
+        speed.dist = json["speed"].toObject()["distance"].toDouble();
+    }
+}
+
+void Agent::write(QJsonObject &json) const
+{
+    WorldObject::write(json);
+    json["speed"] = QJsonObject({ {"angle", speed.angle}, {"distance", speed.dist}});
+    json["shout_range"] = shoutRange;
+    json["ttl"] = ttl;
+    json["distance_to_resource"] = distanceToResource;
+    json["distance_to_warehouse"] = distanceToWarehouse;
+}
+
 void Agent::setInitialSpeed()
 {
     speed.dist = QRandomGenerator::system()->bounded(1.0) + 2;
@@ -113,7 +114,7 @@ void Agent::setInitialSpeed()
 
 void Agent::setInitialCoord()
 {
-    position = {0, 0}; pWorld->randomWorldCoord(r);
+    setPos( pWorld->randomWorldCoord(radius()) );
 }
 
 void Agent::move()
@@ -124,24 +125,24 @@ void Agent::move()
     bool changeDirection = false;
     qreal dx = speed.dist * cos(speed.angle);
     qreal dy = speed.dist * sin(speed.angle);
-    if (position.x() + dx + r> pWorld->maxXcoord()  )
+    if (pos().x() + dx + radius()> pWorld->maxXcoord()  )
     {
-        dx = pWorld->maxXcoord() - (position.x()  + dx + r);
+        dx = pWorld->maxXcoord() - (pos().x()  + dx + radius());
         changeDirection = true;
     }
-    if (position.x() + dx - r < pWorld->minXcoord() )
+    if (pos().x() + dx - radius() < pWorld->minXcoord() )
     {
-        dx = pWorld->minXcoord() - (position.x() + dx - r);
+        dx = pWorld->minXcoord() - (pos().x() + dx - radius());
         changeDirection = true;
     }
-    if (position.y()+dy + r> pWorld->maxYcoord() )
+    if (pos().y()+dy + radius()> pWorld->maxYcoord() )
     {
-        dy = pWorld->maxYcoord() - (position.y()  + dy + r);
+        dy = pWorld->maxYcoord() - (pos().y()  + dy + radius());
         changeDirection = true;
     }
-    if (position.y()+dy - r< pWorld->minYcoord() )
+    if (pos().y()+dy - radius()< pWorld->minYcoord() )
     {
-        dy = pWorld->minYcoord() - (position.y() + dy - r);
+        dy = pWorld->minYcoord() - (pos().y() + dy - radius());
         changeDirection = true;
     }
 
@@ -154,20 +155,21 @@ void Agent::move()
             speed.angle -= 2 * PI;
     }
 
-    position += {dx, dy};
+    QPointF delta(dx, dy);
+    setPos( pos() + delta);
     distanceToResource += speed.dist;
     distanceToWarehouse += speed.dist;
 
-    PointOfInterest* resourcePoi = pWorld->resourceAt(position, r);
+    WorldObject* resourcePoi = pWorld->resourceAt(pos(), radius());
     if (resourcePoi)
     {
         if (state() == Empty)
         {
-            carriedResourceVolume = pWorld->grabResource(resourcePoi, capacity);
+            setVolume( pWorld->grabResource(resourcePoi, capacity()));
         }
         distanceToResource = 0;
         speed.angle += PI;
-        position -= {dx,dy};
+        setPos( pos()- delta);
 
         /*
         if (sqDistanceTo(resourcePoi->pos) < pow(resourcePoi->radius+radius(), 2))
@@ -182,19 +184,19 @@ void Agent::move()
         */
     }
 
-    PointOfInterest* warehousePoi = pWorld->warehouseAt(position, r);
+    WorldObject* warehousePoi = pWorld->warehouseAt(pos(), radius());
     if (warehousePoi)
     {
         if (state() == Full)
         {
-            carriedResourceVolume = pWorld->dropResource(warehousePoi, carriedResourceVolume);
+            setVolume( pWorld->dropResource(warehousePoi, volume()));
 
         }
         speed.angle += PI;
         distanceToWarehouse = 0;
-        position -= {dx,dy};
+        setPos( pos() - delta);
 
-        if (sqDistanceTo(warehousePoi->pos) < pow(warehousePoi->radius+radius(), 2))
+        if (sqDistanceTo(warehousePoi->pos()) < pow(warehousePoi->radius()+radius(), 2))
         {
             // we're inside resource, move to edge
 

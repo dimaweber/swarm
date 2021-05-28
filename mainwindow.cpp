@@ -8,6 +8,8 @@
 #include <QFile>
 #include <QElapsedTimer>
 
+#include <QJsonObject>
+#include <QJsonDocument>
 
 MainWindow::MainWindow(World &world, QWidget *parent)
     : QDialog(parent),
@@ -56,23 +58,23 @@ QGraphicsView* MainWindow::view()
     return  ui->graphicsView;
 }
 
-void MainWindow::createPoiAvatar(PointOfInterest& poi)
+void MainWindow::createPoiAvatar(WorldObject& poi)
 {
     poi.buildAvatar(scene);
 }
 
-void MainWindow::onResourceAppeared(PointOfInterest* poi)
+void MainWindow::onResourceAppeared(WorldObject* poi)
 {
     createPoiAvatar(*poi);
 }
 
-void MainWindow::onWarehouseAppeared(PointOfInterest* poi)
+void MainWindow::onWarehouseAppeared(WorldObject* poi)
 {
     createPoiAvatar(*poi);
     poi->avatar()->setAlpha(0);
 }
 
-void MainWindow::onResourceDepleted(PointOfInterest *poi)
+void MainWindow::onResourceDepleted(WorldObject *poi)
 {
     if (poi)
         poi->avatar()->destroy();
@@ -91,8 +93,10 @@ void MainWindow::onAgentDied(Agent *a)
     ui->agentsCountLabel->setNum( --agentsCreatedCount);
 }
 
-void MainWindow::drawFrame(quint64 calcTime)
+void MainWindow::drawFrame(qint64 calcTime)
 {
+    save();
+
     QElapsedTimer renderTimer;
     renderTimer.start();
     quint16 fullAgentsCount = 0;
@@ -104,8 +108,8 @@ void MainWindow::drawFrame(quint64 calcTime)
             agent->avatar()->setPos(agent->pos());
             agent->avatar()->setRotate(agent->direction());
 
-            agent->avatar()->setBrush(agent->brush());
-            agent->avatar()->setPen(agent->pen());
+            agent->avatar()->setBrush(agent->color());
+            agent->avatar()->setPen(agent->color());
             if (agent->state() == Agent::Empty)
                 ++emptyAgentsCount;
             else
@@ -136,30 +140,31 @@ void MainWindow::drawFrame(quint64 calcTime)
         world.commLinesRelease();
     }
 
-    foreach (PointOfInterest* warehouse, world.warehouseList())
+    world.forEachWarehouse([](WorldObject* warehouse)
     {
         auto pAvatar = warehouse->avatar();
         pAvatar->setRect(warehouse->boundRect());
-        if (warehouse->volume() < warehouse->criticalVolume)
+        if (warehouse->volume() < warehouse->capacity())
         {
             pAvatar->setBorderWidth(1);
-            pAvatar->setAlpha( warehouse->volume() / warehouse->criticalVolume * 255);
+            pAvatar->setAlpha( warehouse->volume() / warehouse->capacity() * 255);
         }
         else
         {
             pAvatar->setBorderWidth(3);
         }
-    }
+    });
 
-    world.forEachResource([](PointOfInterest* resource)
+    world.forEachResource([](WorldObject* resource)
     {
         resource->avatar()->setRect(resource->boundRect());
     });
 
     quint32 volSum = 0;
-    foreach (PointOfInterest* warehouse, world.warehouseList()) {
+    world.forEachWarehouse([&volSum](WorldObject* warehouse)
+    {
         volSum += warehouse->volume();
-    }
+    });
     ui->warehouseVolumeLabel->setNum((double)volSum);
 
     if (agentsCreatedCount)
@@ -187,4 +192,20 @@ void MainWindow::removeCommunicationLines()
     }
 
     //communicationLines.clear();
+}
+
+bool MainWindow::save()
+{
+    QFile file ("/home/weber/save.json");
+
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        return false;
+    }
+
+    QJsonObject swarmJson;
+    world.write(swarmJson);
+    file.write(QJsonDocument(swarmJson).toJson());
+
+    return true;
 }

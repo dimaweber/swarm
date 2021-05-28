@@ -9,6 +9,9 @@
 
 #include <QReadWriteLock>
 
+const qreal PI = 3.1415926;
+
+
 struct PointOfInterestAvatar
 {
     QGraphicsEllipseItem* pEllipse = nullptr;
@@ -55,33 +58,50 @@ struct PointOfInterestAvatar
     }
 };
 
-struct PointOfInterest
+class WorldObject : public QObject
 {
-    QPointF pos;
-    qreal radius;
-    qreal criticalVolume;
-    QColor color;
+    Q_OBJECT
     bool valid = true;
     mutable QReadWriteLock accessMutex;
+    PointOfInterestAvatar avtr;
+    qreal   _volume;
+    qreal   _radius;
+    qreal   _capacity;
+    QPointF _position;
+    QColor  _color;
 
-    PointOfInterest();
+public:
+    WorldObject(QObject* parent = nullptr);
 
-    QRectF boundRect() const;
+    virtual QRectF boundRect() const;
 
     bool collaide(QPointF point, quint16 r);
 
-    void setVolume(qreal v);
-    qreal volume() const;
     qreal incVolume(qreal v);
     qreal decVolume(qreal v);
     bool tryDecVolume(qreal v);
 
-    void buildAvatar(QGraphicsScene* scene);
-    PointOfInterestAvatar* avatar() {return &avtr;}
+    virtual void buildAvatar(QGraphicsScene* scene);
+    PointOfInterestAvatar* avatar();
 
-private:
-    PointOfInterestAvatar avtr;
-    qreal _volume;
+    virtual void write(QJsonObject& json) const;
+    virtual void read(const QJsonObject&);
+
+    qreal sqDistanceTo(QPointF a);
+
+    bool isValid() const {return valid;}
+    qreal radius() const;
+    qreal volume() const;
+    qreal capacity() const;
+    QPointF pos() const;
+    virtual QColor color() const;
+
+    void invalidate() { valid = false; }
+    WorldObject& setPos(QPointF p);
+    WorldObject& setRadius(qreal radius);
+    WorldObject& setVolume(qreal v);
+    WorldObject& setCapacity(qreal capacity = -1);
+    WorldObject& setColor(const QColor& color);
 };
 
 #endif // POI_H

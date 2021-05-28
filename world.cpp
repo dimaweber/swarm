@@ -4,11 +4,14 @@
 #include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QtConcurrent>
+#include <QJsonArray>
 
 Agent* World::generateNewAgent(QPointF position)
 {
     Agent* agent = new Agent(this);
-    agent->setPos(position);
+    agent-> setPos(position)
+           .setRadius(DEFAULT_INITIAL_AGENT_RADIUS)
+           .setCapacity(PI * DEFAULT_INITIAL_AGENT_RADIUS * DEFAULT_INITIAL_AGENT_RADIUS);
     connect (agent, &Agent::newCommunication, this, &World::onNewCommunication);
 
     emit agentCreated(agent);
@@ -27,19 +30,26 @@ Agent* World::generateNewAgent(QPointF position)
 void World::onStart()
 {
     stopRequested = false;
+    for (int i=0;i<3;i++)
+        onNewWarehouseRequest();
+
+    for (int i=0;i <5; i++)
+        onNewResourceRequest();
+
     for (int i =0; i<AGENTS_COUNT; i++)
     {
         bool ok = true;
         QPointF pos;
         do
         {
+            ok = true;
             pos = randomWorldCoord(10);
-            foreach (PointOfInterest* resPo, pResources)
+            foreach (WorldObject* resPo, pResources)
                 if (resPo->collaide(pos, 10))
                 {
                     ok = false;
                 }
-            foreach (PointOfInterest* resPo, pWarehouse)
+            foreach (WorldObject* resPo, pWarehouse)
                 if (resPo->collaide(pos, 10))
                 {
                     ok = false;
@@ -50,40 +60,76 @@ void World::onStart()
         generateNewAgent( pos );
     }
 
-    for (int i=0;i<3;i++)
-        onNewWarehouseRequest();
-
-    for (int i=0;i <5; i++)
-        onNewResourceRequest();
 
     iteration();
 }
 
-PointOfInterest* World::generateResource()
+void World::read(const QJsonObject &json)
 {
-    PointOfInterest* poi = new PointOfInterest;
-    poi->radius = RESOURCE_INITIAL_RADIUS;
-    poi->pos = randomWorldCoord(poi->radius);
-    poi->setVolume(PI * poi->radius * poi->radius);
-    poi->criticalVolume = poi->volume();
-    poi->color = QColor("blue");
+    size.setHeight( json["size"].toObject()["height"].toInt(DEFAULT_WORLD_SIZE.height()));
+    size.setWidth( json["size"].toObject()["width"].toInt(DEFAULT_WORLD_SIZE.width()));
+}
+
+void World::write(QJsonObject &json) const
+{
+    QJsonObject sz;
+    sz["width"] = size.width();
+    sz["height"] = size.height();
+    json["size"] = sz;
+
+    QJsonArray agentsArray;
+    forEachAgent([&agentsArray](const Agent* agent)
+    {
+        QJsonObject agentJson;
+        agent->write(agentJson);
+        agentsArray.append(agentJson);
+    });
+    json["agents"] = agentsArray;
+
+    QJsonArray resourcesArray;
+    forEachResource([&resourcesArray](const WorldObject* poi)
+    {
+        QJsonObject poiJson;
+        poi->write(poiJson);
+        resourcesArray.append(poiJson);
+    });
+    json["resources"] = resourcesArray;
+
+    QJsonArray warehousesArray;
+    forEachWarehouse([&warehousesArray](const WorldObject* poi)
+    {
+        QJsonObject poiJson;
+        poi->write(poiJson);
+        warehousesArray.append(poiJson);
+    });
+    json["warehouses"] = warehousesArray;
+}
+
+WorldObject* World::generateResource()
+{
+    WorldObject* poi = new WorldObject();
+    poi->setRadius (RESOURCE_INITIAL_RADIUS)
+        .setPos (randomWorldCoord(poi->radius()))
+        .setVolume(PI * pow(poi->radius(), 2))
+        .setCapacity(PI * pow(poi->radius(), 2))
+        .setColor("blue");
     return poi;
 }
 
-PointOfInterest* World::generateWarehouse()
+WorldObject* World::generateWarehouse()
 {
-    PointOfInterest* poi = new PointOfInterest;
-    poi->radius = WAREHOUSE_INITIAL_RADIUS;
-    poi->setVolume(0);
-    poi->pos = randomWorldCoord(poi->radius);
-    poi->criticalVolume = PI * pow(poi->radius, 2);
-    poi->color = QColor("orange");
+    WorldObject* poi = new WorldObject;
+    poi->setRadius (WAREHOUSE_INITIAL_RADIUS)
+        .setVolume(0)
+        .setPos( randomWorldCoord(poi->radius()))
+        .setCapacity( PI * pow(poi->radius(), 2))
+        .setColor("orange");
     return poi;
 }
 
 World::World(QObject *parent)
-    :QObject(parent), size(WORLD_SIZE)
-#if QT_VERSION < 0x051400
+    :QObject(parent), size(DEFAULT_WORLD_SIZE)
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     ,agentListAccess(QMutex::Recursive)
 #endif
 {
@@ -138,10 +184,10 @@ qreal World::maxYcoord() const
     return boundRect().bottom();
 }
 
-PointOfInterest *World::resourceAt(QPointF pos, quint16 r)
+WorldObject *World::resourceAt(QPointF pos, quint16 r)
 {
     QMutexLocker lock(&resourcesAccess);
-    foreach(PointOfInterest* poi,pResources)
+    foreach(WorldObject* poi,pResources)
     {
         if ( poi->collaide(pos, r))
             return poi;
@@ -149,9 +195,9 @@ PointOfInterest *World::resourceAt(QPointF pos, quint16 r)
     return nullptr;
 }
 
-PointOfInterest* World::warehouseAt(QPointF pos, quint16 r)
+WorldObject* World::warehouseAt(QPointF pos, quint16 r)
 {
-    foreach(PointOfInterest* poi,pWarehouse)
+    foreach(WorldObject* poi,pWarehouse)
     {
         if ( poi->collaide(pos, r))
             return poi;
@@ -159,44 +205,44 @@ PointOfInterest* World::warehouseAt(QPointF pos, quint16 r)
     return nullptr;
 }
 
-qreal World::grabResource(PointOfInterest *poi, qreal capacity)
+qreal World::grabResource(WorldObject *poi, qreal capacity)
 {
     QMutexLocker lock(&resourcesAccess);
     qreal ret = 0;
 
-    if (poi->valid)
+    if (poi->isValid())
     {
         ret = poi->decVolume(capacity);
 
         if (poi->volume() < capacity)
         {
             emit resourceDepleted(poi);
-            poi->valid = false;
+            poi->invalidate();
             //delete poi;
             onNewResourceRequest();
         }
         else
         {
-            poi->radius = sqrt(poi->volume() / PI);
+            poi->setRadius (sqrt(poi->volume() / PI));
         }
     }
     return ret;
 }
 
-qreal World::dropResource(PointOfInterest* poi, qreal volume)
+qreal World::dropResource(WorldObject* wo, qreal volume)
 {
     qreal ret = 0;
-    poi->incVolume(volume);
+    wo->incVolume(volume);
 
-    if (poi->volume() > WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS)
+    if (wo->volume() > WAREHOUSE_RESOURCES_TO_GENERATE_NEW_AGENTS)
     {
-        while (poi->tryDecVolume(NEW_AGENT_RESOURCES_PRICE) )
+        while (wo->tryDecVolume(NEW_AGENT_RESOURCES_PRICE) )
         {
-            emit requestNewAgent(poi->pos + QPointF(poi->radius, 0));
+            emit requestNewAgent(wo->pos() + QPointF(wo->radius()+3, 0));
         }
     }
 
-    poi->radius = sqrt(qMax(poi->volume(), poi->criticalVolume) / PI);
+    wo->setRadius (sqrt(qMax(wo->volume(), wo->capacity()) / PI));
 
     return ret;
 }
@@ -214,9 +260,9 @@ void World::iteration()
     calcTime.start();
     emit iterationStart();
 
-    foreach (PointOfInterest* poi, pResources)
+    foreach (WorldObject* poi, pResources)
     {
-        if (poi->valid)
+        if (poi->isValid())
             continue;
         pResources.removeOne(poi);
         delete poi;
@@ -280,7 +326,7 @@ void World::iteration()
 
 void World::onNewResourceRequest()
 {
-    PointOfInterest* resource = generateResource();
+    WorldObject* resource = generateResource();
     pResources.append( resource );
 
     emit resourceAppeared (resource);

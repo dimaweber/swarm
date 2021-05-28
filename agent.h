@@ -1,6 +1,7 @@
 #ifndef AGENT_H
 #define AGENT_H
 #include "world.h"
+#include "poi.h"
 
 #include <QBrush>
 #include <QPen>
@@ -8,6 +9,7 @@
 #include <QGraphicsScene>
 
 class QGraphicsItem;
+class QJsonObject;
 
 struct AgentAvatar
 {
@@ -58,7 +60,7 @@ struct AgentAvatar
     }
 };
 
-class Agent : public QObject
+class Agent : public WorldObject
 {
     Q_OBJECT
 public:
@@ -70,33 +72,26 @@ private:
         qreal angle = 0; // radian
     };
 
-    QPointF position;
-    qreal r=5;
-    qreal capacity = 1.0;
-    qreal carriedResourceVolume = 0;
+    //QPointF position;
+//    qreal r = DEFAULT_INITIAL_AGENT_RADIUS;
+    //qreal capacity = 1.0;
+    //qreal carriedResourceVolume = 0;
     qreal shoutRange = 50;
     int ttl = 1000;
 
-    QBrush brushEmpty;
-    QBrush brushFull;
-    QPen   penEmpty;
-    QPen   penFull;
+    QColor colorEmpty;
+    QColor colorFull;
     AgentSpeed speed;
     //State agentState;
 
     World* pWorld;
 
-    quint32 distanceToResource = 10000;
-    quint32 distanceToWarehouse = 10000;
+    qreal distanceToResource = 10000;
+    qreal distanceToWarehouse = 10000;
 
     AgentAvatar  avtr;
 public:
     Agent(World* world, QPointF initialPosition = QPointF(), QObject* parent = nullptr);
-
-    QRectF boundRect() const;
-    QBrush brush() const;
-    QPen pen() const;
-    QPointF pos() const;
 
     AgentAvatar* avatar();
     void buildAvatar(QGraphicsScene* scene);
@@ -104,15 +99,16 @@ public:
 
     State state() const;
 
-    qreal sqDistanceTo(QPointF a);
-
-    void setPos(QPointF p) {position = p;}
-
-    qreal radius() const {return r;}
     qreal direction() const {return speed.angle;}
 
     void acousticShout(AcousticSpace &space);
     void acousticListen(AcousticSpace &space);
+
+    QColor color() const;
+
+    void read (const QJsonObject& json);
+    void write (QJsonObject& json) const;
+
 public slots:
     void move();
 

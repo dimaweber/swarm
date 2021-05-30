@@ -41,7 +41,7 @@ void Agent::buildAvatar(QGraphicsScene *scene)
 
 Agent::State Agent::state() const
 {
-    if (ttl == 0)
+    if (ttl <= 0)
         return Dead;
     return qFuzzyIsNull(volume())?Empty:Full;
 }
@@ -114,12 +114,12 @@ void Agent::setInitialSpeed()
 
 void Agent::setInitialCoord()
 {
-    setPos( pWorld->randomWorldCoord(radius()) );
+    setPos( pWorld->randomWorldCoord(DEFAULT_INITIAL_AGENT_RADIUS) );
 }
 
 void Agent::move()
 {
-    if (--ttl == 0)
+    if (ttl <= 0 || --ttl == 0)
         return;
 
     bool changeDirection = false;
@@ -169,7 +169,7 @@ void Agent::move()
         }
         distanceToResource = 0;
         speed.angle += PI;
-        setPos( pos()- delta);
+        setPos( pos()- delta /*- delta*/);
 
         /*
         if (sqDistanceTo(resourcePoi->pos) < pow(resourcePoi->radius+radius(), 2))
@@ -194,7 +194,7 @@ void Agent::move()
         }
         speed.angle += PI;
         distanceToWarehouse = 0;
-        setPos( pos() - delta);
+        setPos( pos() - delta /*- delta*/);
 
         if (sqDistanceTo(warehousePoi->pos()) < pow(warehousePoi->radius()+radius(), 2))
         {

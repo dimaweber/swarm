@@ -9,9 +9,9 @@
 Agent* World::generateNewAgent(QPointF position)
 {
     Agent* agent = new Agent(this);
-    agent-> setPos(position)
-           .setRadius(DEFAULT_INITIAL_AGENT_RADIUS)
+    agent-> setRadius(DEFAULT_INITIAL_AGENT_RADIUS)
            .setCapacity(PI * DEFAULT_INITIAL_AGENT_RADIUS * DEFAULT_INITIAL_AGENT_RADIUS);
+    agent->setPos(position);
     connect (agent, &Agent::newCommunication, this, &World::onNewCommunication);
 
     emit agentCreated(agent);
@@ -109,9 +109,9 @@ WorldObject* World::generateResource()
 {
     WorldObject* poi = new WorldObject();
     poi->setRadius (RESOURCE_INITIAL_RADIUS)
-        .setPos (randomWorldCoord(poi->radius()))
-        .setVolume(PI * pow(poi->radius(), 2))
-        .setCapacity(PI * pow(poi->radius(), 2))
+        .setPos (randomWorldCoord(RESOURCE_INITIAL_RADIUS))
+        .setVolume(PI * pow(RESOURCE_INITIAL_RADIUS, 2))
+        .setCapacity(PI * pow(RESOURCE_INITIAL_RADIUS, 2))
         .setColor("blue");
     return poi;
 }
@@ -121,8 +121,8 @@ WorldObject* World::generateWarehouse()
     WorldObject* poi = new WorldObject;
     poi->setRadius (WAREHOUSE_INITIAL_RADIUS)
         .setVolume(0)
-        .setPos( randomWorldCoord(poi->radius()))
-        .setCapacity( PI * pow(poi->radius(), 2))
+        .setPos( randomWorldCoord(WAREHOUSE_INITIAL_RADIUS))
+        .setCapacity( PI * pow(WAREHOUSE_INITIAL_RADIUS, 2))
         .setColor("orange");
     return poi;
 }
@@ -279,7 +279,6 @@ void World::iteration()
 
     auto agentActions = [this](Agent* agent)
     {
-        //foreach(Agent* agent, cluster)
         {
             if (agent->state() == Agent::Dead)
             {

@@ -196,7 +196,7 @@ void MainWindow::removeCommunicationLines()
 
 bool MainWindow::save()
 {
-    QFile file ("/home/weber/save.json");
+    QFile file ("save.json");
 
     if (!file.open(QIODevice::WriteOnly))
     {

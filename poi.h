@@ -64,10 +64,10 @@ class WorldObject : public QObject
     bool valid = true;
     mutable QReadWriteLock accessMutex;
     PointOfInterestAvatar avtr;
-    qreal   _volume;
-    qreal   _radius;
-    qreal   _capacity;
-    QPointF _position;
+    qreal   _volume = 0;
+    qreal   _radius = 0;
+    qreal   _capacity = 0;
+    QPointF _position = {0, 0};
     QColor  _color;
 
 public:
